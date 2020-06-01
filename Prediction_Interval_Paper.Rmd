@@ -1,0 +1,246 @@
+---
+title: "Prediction Interval"
+author: "T. Bishop"
+date: "15/01/2020"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Set Up
+
+Start: August 2013
+End:   April 2020
+
+Load packages.
+
+```{r}
+library(geoR)
+library(lattice)
+library(gstat)
+library(moments)
+library(ggplot2)
+library(raster)
+library(moments)
+```
+
+# Process Data
+
+## Import
+```{r}
+calib=read.table("C:\\Users\\bishop\\Dropbox (Sydney Uni)\\Research\\Projects\\Pedometrics2013\\Paper_Pred_Interval\\Data\\DecOdeh00_10.txt", header=TRUE, sep="\t", dec=".")
+valid=read.table("C:\\Users\\bishop\\Dropbox (Sydney Uni)\\Research\\Projects\\Pedometrics2013\\Paper_Pred_Interval\\Data\\2010pcdata.txt", header=TRUE, sep="\t", dec=".")
+```
+
+## Fix names to match
+
+```{r}
+colnames(calib)[3]<-"clay"
+colnames(valid)[4]<-"slu"
+colnames(valid)[5]<-"lu"
+colnames(valid)[6]<-"soil"
+```
+
+## Factors for soil, lu and slu
+
+```{r}
+calib$lu<-as.factor(calib$lu)
+calib$slu<-as.factor(calib$slu)
+calib$soil<-as.factor(calib$soil)
+
+valid$lu<-as.factor(valid$lu)
+valid$slu<-as.factor(valid$slu)
+valid$soil<-as.factor(valid$soil)
+```
+
+# Exploratory Data Analysis
+
+## Univariate
+
+### Calibration set
+
+```{r}
+summary(calib$clay)
+length(calib$clay)
+skewness(calib$clay)
+sqrt(var(calib$clay))
+```
+
+```{r}
+sum.df<-data.frame (
+  stats=c("mean = 31.0","median = 31.5", "std. deviation = 16.5", "observations = 97", "skewness = 0.20"),
+  y=c(17.5, 16.7, 15.9, 15.1, 14.3))
+
+#tiff('hist_calib.tiff')
+ggplot(calib, aes(x=clay)) + geom_histogram(binwidth=6,colour='black',fill='grey')+
+  xlab("Clay (%)") +
+  ylab("Frequency") +
+  theme(axis.title.y = element_text(size=20))+
+  theme(axis.title.y = element_text(size=12),axis.text.y  = element_text(size=10))+
+  xlim(0,85)+
+  ylim(0,20)+
+  theme(axis.title.x = element_text(size=12),axis.text.x  = element_text(size=10))+
+  geom_text(data=sum.df,aes(x=50,y=y,label=stats),size=5, hjust=0)+
+  annotate("text",x=0, y=20.0, label="Calibration dataset",size=7, hjust = 0)
+#   annotate("text",x=60, y=15, label="Median = 31.5",size=4)+
+#   annotate("text",x=60, y=12, label="Observations = 97",size=4)
+#dev.off()
+```
+
+### Validation set
+
+```{r}
+summary(valid$clay)
+length(valid$clay)
+skewness(valid$clay)
+sqrt(var(valid$clay))
+```
+
+```{r}
+sum.df<-data.frame (
+  stats=c("mean = 41.7","median = 45.2", "std. deviation = 22.5", "observations = 44",  "skewness = -0.27"),
+  y=c(9, 8.6, 8.2, 7.8, 7.4))
+
+#tiff('hist_valid.tiff')
+ggplot(valid, aes(x=clay)) + geom_histogram(binwidth=6,colour='black',fill='grey')+
+  xlab("Clay (%)") +
+  ylab("Frequency") +
+  theme(axis.title.y = element_text(size=20))+
+  theme(axis.title.y = element_text(size=12),axis.text.y  = element_text(size=10))+
+  xlim(0,85)+
+  ylim(0,10)+
+  theme(axis.title.x = element_text(size=12),axis.text.x  = element_text(size=10))+
+  geom_text(data=sum.df,aes(x=50,y=y,label=stats),size=5, hjust=0)+
+  annotate("text",x=0, y=10.0, label="Validation dataset",size=7, hjust = 0)
+#   annotate("text",x=60, y=15, label="Median = 31.5",size=4)+
+#   annotate("text",x=60, y=12, label="Observations = 97",size=4)
+#dev.off()
+```
+
+## Bivariate
+
+### Soil Classes
+
+Re-code soil class
+
+```{r}
+calib$soil.type<-ifelse(calib$soil==1, "Vertosol", "Other")
+
+#tiff('soil_clay.tiff')
+p <- ggplot(calib, aes(x=soil.type, y=clay)) + geom_boxplot() +
+  xlab("Soil Type") +
+  ylab("Clay (%)")+
+  theme(axis.title.y = element_text(size=20))+
+  ylim(0,80)+
+  theme(axis.title.y = element_text(size=12),axis.text.y  = element_text(size=10))+
+  theme(axis.title.x = element_text(size=12),axis.text.x  = element_text(size=10))
+p
+#dev.off()
+```
+
+```{r}
+plot(calib$soil,calib$clay)
+plot(valid$soil,valid$clay)
+tapply(calib$clay,calib$soil,length)
+```
+
+Shows some difference - a candidate
+
+### Land Use
+
+COULD ADD label to figures
+("text",x=80, y=0, label="a",size=8)
+
+Re-code land use
+
+```{r}
+calib$land.use<-ifelse(calib$lu==1, "Dryland cropping",
+                 ifelse(calib$lu==2,"Forest",
+                        ifelse(calib$lu==3, "Pasture","Irrigated")))
+
+head(calib$lu)
+```
+
+Cropping, Forest, Pasture, Irrigated
+
+```{r}
+plot(calib$lu,calib$clay)
+plot(valid$lu,valid$clay)
+tapply(calib$clay,calib$lu,length)
+tapply(valid$clay,valid$lu,length)
+```
+
+Shows some difference - a candidate
+
+```{r}
+#tiff('luse_clay.tiff')
+p <- ggplot(calib, aes(x=land.use, y=clay)) + geom_boxplot() +
+  xlab("Land Use") +
+  ylab("Clay (%)")+
+  theme(axis.title.y = element_text(size=20))+
+  ylim(0,80)+
+  theme(axis.title.y = element_text(size=12),axis.text.y  = element_text(size=10))+
+  theme(axis.title.x = element_text(size=12),axis.text.x  = element_text(size=10))
+p
+#dev.off()
+```
+
+### PCA
+
+```{r}
+skewness(calib[,7:12])
+cor(calib$clay,calib[,7:12])
+cor(calib$clay,calib[,7:12],method="spearman")
+```
+
+No diff with spearman
+
+## Linear Mixed Model
+
+### Regression with OLS
+
+Build prediction frame
+
+```{r}
+calib<-cbind(calib$clay,calib[,1:2],calib[,5:12])
+colnames(calib)[1]<-"clay"
+```
+
+Fit model
+
+```{r}
+clay.lm<-lm(clay~soil+lu+pc1+pc2+pc3+pc4+pc5+pc6, data=calib)
+summary(clay.lm)
+```
+
+Model shows some promise with adjusted r2 of 0.46.
+
+Test model assumptions
+
+```{r}
+par(mfrow=c(2,2))
+hist(rstandard(clay.lm),xlab="Standardised residuals",ylab="Frequency",main=NULL)
+#skewness(clay.lm$residuals)
+plot(clay.lm$fitted.values,(rstandard(clay.lm)),xlab="Fitted values",ylab="Standardised residuals")
+qqnorm(rstandard(clay.lm),main=NULL,xlab="Normal quantiles",ylab="Sample quantiles")
+abline(0,1)
+```
+
+Assumptions met.
+
+### Fit Linear Mixed Model
+
+Create GeoR object and include OLS residuals to examine spatial structure of these to see if kriging residuals has merit.
+
+```{r}
+calib<-cbind(calib,clay.lm$residuals)
+head(calib)
+colnames(calib)[12] <- "residuals"
+res <- as.geodata(calib,coords.col=2:3,data.col=1, covar.col=4:11)
+```
+
+
