@@ -1,7 +1,7 @@
 ---
 title: "Prediction Interval"
 author: "T. Bishop"
-date: "15/01/2020"
+date: "`r Sys.Date()`"
 output:
   html_document: default
   word_document: default
@@ -14,7 +14,6 @@ knitr::opts_chunk$set(echo = TRUE)
 # Set Up
 
 Start: August 2013
-End:   April 2020
 
 Load packages.
 
@@ -240,7 +239,18 @@ Create GeoR object and include OLS residuals to examine spatial structure of the
 calib<-cbind(calib,clay.lm$residuals)
 head(calib)
 colnames(calib)[12] <- "residuals"
-res <- as.geodata(calib,coords.col=2:3,data.col=1, covar.col=4:11)
+res <- as.geodata(calib,coords.col=2:3,data.col=12, covar.col=4:11)
+res_var <- variog(res,option= "bin",messages = T,uvec=c(seq(0,50000,2000)))
+plot(res_var, pch = 19, ylim=c(0,300),xlim=c(0,30000),col= "black", main="",xlab="distance (m)")
 ```
+
+Residuals indicate short range spatail structure out to 5km so kriging of residuals shows promise.  Now create new GeoR object where response is clay.
+
+```{r}
+gcalib <- as.geodata(calib,coords.col=2:3,data.col=1, covar.col=4:11)
+summary(gcalib)
+plot(gcalib)
+```
+
 
 
