@@ -229,7 +229,16 @@ qqnorm(rstandard(clay.lm),main=NULL,xlab="Normal quantiles",ylab="Sample quantil
 abline(0,1)
 ```
 
-Assumptions met.
+Assumptions met but lets check with Wally Plots.
+
+```{r}
+library(MESS)
+wallyplot(clay.lm)
+qqnorm.wally <- function(x, y, ...) { qqnorm(y, ...) ; abline(a=0, b=1) }
+wallyplot(clay.lm, FUN=qqnorm.wally, main="")
+```
+
+
 
 ### Fit Linear Mixed Model
 
@@ -252,5 +261,173 @@ summary(gcalib)
 plot(gcalib)
 ```
 
+Define initial parameters for spatial correlation based on residual semivariogram.  Use nugget as 1st lag semivariance.  Have a few parameter combinations to find maximum likelihood and avoid local optima. First set is:
 
+```{r}
+init.par<-c(50,5000)
+nug.par=50
+lmm.exp <- likfit(gcalib, trend= ~soil+lu+pc1+pc2+pc3+pc4+pc5+pc6,
+                  lambda=1,ini.cov.pars = init.par,fix.nugget = FALSE, nugget = nug.par, 
+                  lik.method = "REML", cov.model = "exp",limits = pars.limits(phi=c(0, 50000)))
+lmm.exp$loglik
+lmm.exp$cov.pars
+lmm.exp$phi
+lmm.exp$nugget
+```
 
+Combination 2
+
+```{r}
+init.par<-c(25,5000)
+nug.par=50
+lmm.exp <- likfit(gcalib, trend= ~soil+lu+pc1+pc2+pc3+pc4+pc5+pc6,
+                  lambda=1,ini.cov.pars = init.par,fix.nugget = FALSE, nugget = nug.par, 
+                  lik.method = "REML", cov.model = "exp",limits = pars.limits(phi=c(0, 50000)))
+lmm.exp$loglik
+lmm.exp$cov.pars
+lmm.exp$phi
+lmm.exp$nugget
+```
+
+Combination 3
+
+```{r}
+init.par<-c(75,5000)
+nug.par=50
+lmm.exp <- likfit(gcalib, trend= ~soil+lu+pc1+pc2+pc3+pc4+pc5+pc6,
+                  lambda=1,ini.cov.pars = init.par,fix.nugget = FALSE, nugget = nug.par, 
+                  lik.method = "REML", cov.model = "exp",limits = pars.limits(phi=c(0, 50000)))
+lmm.exp$loglik
+lmm.exp$cov.pars
+lmm.exp$phi
+lmm.exp$nugget
+```
+
+Combination 4
+
+```{r}
+init.par<-c(50,10000)
+nug.par=50
+lmm.exp <- likfit(gcalib, trend= ~soil+lu+pc1+pc2+pc3+pc4+pc5+pc6,
+                  lambda=1,ini.cov.pars = init.par,fix.nugget = FALSE, nugget = nug.par, 
+                  lik.method = "REML", cov.model = "exp",limits = pars.limits(phi=c(0, 50000)))
+lmm.exp$loglik
+lmm.exp$cov.pars
+lmm.exp$phi
+lmm.exp$nugget
+```
+
+Combination 5
+
+```{r}
+init.par<-c(50,2000)
+nug.par=50
+lmm.exp <- likfit(gcalib, trend= ~soil+lu+pc1+pc2+pc3+pc4+pc5+pc6,
+                  lambda=1,ini.cov.pars = init.par,fix.nugget = FALSE, nugget = nug.par, 
+                  lik.method = "REML", cov.model = "exp",limits = pars.limits(phi=c(0, 50000)))
+lmm.exp$loglik
+lmm.exp$cov.pars
+lmm.exp$phi
+lmm.exp$nugget
+```
+
+The best combination is 5 but it is marginal.  The spatial model is best due to smaller AIC.
+We plot model over residual variogram to see fit.
+
+```{r}
+plot(res_var, pch = 19, ylim=c(0,300),xlim=c(0,30000),col= "black", main="",xlab="distance (m)")
+lines(lmm.exp)
+```
+
+### Variable Selection
+
+Below is the function to perform Wald tests on the fixed effects.
+
+```{r}
+wald.test<-function(model.geostat){
+fitmodel<-model.geostat
+# get coefficients
+coefficients <- fitmodel$beta
+# get standard errors
+se_error <- sqrt(diag(fitmodel$beta.var))
+# get t values
+t_value <- coefficients/se_error
+# and probabilities
+t_prob <- 2 * pt(-abs(t_value), df = (nrow(calib) -length (coefficients)))
+# make pretty
+coef_mat <- cbind(coefficients, se_error, t_value, t_prob)
+colnames(coef_mat) <- c("Estimate", "Std.Err","t value", "Pr(>|t|)")
+rownames(coef_mat) <- colnames(model.matrix(fitmodel$trend, gcalib))
+return(printCoefmat(coef_mat))
+}
+```
+
+We apply it to our model with all covariates.
+
+```{r}
+wald.test(lmm.exp)
+```
+
+We remove the covariate with the largest P-value which is pc2 and run again.
+
+```{r}
+init.par<-c(50,2000)
+nug.par=50
+lmm.exp <- likfit(gcalib, trend= ~soil+lu+pc1+pc3+pc4+pc5+pc6,
+                  lambda=1,ini.cov.pars = init.par,fix.nugget = FALSE, nugget = nug.par, 
+                  lik.method = "REML", cov.model = "exp",limits = pars.limits(phi=c(0, 50000)))
+summary(lmm.exp)
+wald.test(lmm.exp)
+```
+
+We remove pc1.
+
+```{r}
+init.par<-c(50,2000)
+nug.par=50
+lmm.exp <- likfit(gcalib, trend= ~soil+lu+pc3+pc4+pc5+pc6,
+                  lambda=1,ini.cov.pars = init.par,fix.nugget = FALSE, nugget = nug.par, 
+                  lik.method = "REML", cov.model = "exp",limits = pars.limits(phi=c(0, 50000)))
+summary(lmm.exp)
+wald.test(lmm.exp)
+```
+
+We remove soil.
+
+```{r}
+init.par<-c(50,2000)
+nug.par=50
+lmm.exp <- likfit(gcalib, trend= ~lu+pc3+pc4+pc5+pc6,
+                  lambda=1,ini.cov.pars = init.par,fix.nugget = FALSE, nugget = nug.par, 
+                  lik.method = "REML", cov.model = "exp",limits = pars.limits(phi=c(0, 50000)))
+summary(lmm.exp)
+wald.test(lmm.exp)
+```
+
+We remove pc3.
+
+```{r}
+init.par<-c(50,2000)
+nug.par=50
+lmm.exp <- likfit(gcalib, trend= ~lu+pc4+pc5+pc6,
+                  lambda=1,ini.cov.pars = init.par,fix.nugget = FALSE, nugget = nug.par, 
+                  lik.method = "REML", cov.model = "exp",limits = pars.limits(phi=c(0, 50000)))
+summary(lmm.exp)
+wald.test(lmm.exp)
+```
+
+We remove pc4.
+
+```{r}
+init.par<-c(50,2000)
+nug.par=50
+lmm.exp <- likfit(gcalib, trend= ~lu+pc5+pc6,
+                  lambda=1,ini.cov.pars = init.par,fix.nugget = FALSE, nugget = nug.par, 
+                  lik.method = "REML", cov.model = "exp",limits = pars.limits(phi=c(0, 50000)))
+summary(lmm.exp)
+wald.test(lmm.exp)
+```
+
+We now have our final model with land use and pc5 and pc6.
+
+NOTE - likfit function not sensitive to range parameter - not sure if dataset specific or issue with library.  Kate or Liana data?
