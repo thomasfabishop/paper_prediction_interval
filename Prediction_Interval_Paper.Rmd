@@ -431,3 +431,12 @@ wald.test(lmm.exp)
 We now have our final model with land use and pc5 and pc6.
 
 NOTE - likfit function not sensitive to range parameter - not sure if dataset specific or issue with library.  Kate or Liana data?
+
+### Model Testing
+
+Now we perform cross-validation to assess the model in terms of its predictions - point and interval estimates.
+
+```{r}
+xv.REML <- xvalid(gcalib, model = lmm.exp, reestimate=TRUE)
+```
+
