@@ -436,7 +436,90 @@ NOTE - likfit function not sensitive to range parameter - not sure if dataset sp
 
 Now we perform cross-validation to assess the model in terms of its predictions - point and interval estimates.
 
+First we do without re-fitting the model for each split.
+
 ```{r}
-xv.REML <- xvalid(gcalib, model = lmm.exp, reestimate=TRUE)
+#xv.REML <- xvalid(gcalib, model = lmm.exp, reestimate=TRUE)
+xv.REML <- xvalid(gcalib, model = lmm.exp)
 ```
+
+We test how well the prediction variance matches the errors.
+
+```{r}
+mean(xv.REML$std.error^2)
+median(xv.REML$std.error^2)
+```
+
+We test the bias and accuracy.
+
+```{r}
+mean(xv.REML$error)
+sqrt(mean(xv.REML$error^2))
+```
+
+Now do by re-fitting model parameters at each plit.
+
+```{r}
+xv.REML2 <- xvalid(gcalib, model = lmm.exp, reestimate=TRUE,messages="F")
+```
+
+We test how well the prediction variance matches the errors.
+
+```{r}
+mean(xv.REML2$std.error^2)
+median(xv.REML2$std.error^2)
+```
+
+We test the bias and accuracy.
+
+```{r}
+mean(xv.REML2$error)
+sqrt(mean(xv.REML2$error^2))
+```
+
+Let compare predictions, prediction variance and standardised error using both CV approaches. 
+
+```{r}
+plot(xv.REML$predicted,xv.REML2$predicted, xlab ="Predictions - CV with no re-estimation", ylab ="Predictions - CV with re-estimation")
+abline(0,1)
+plot(xv.REML$krige.var,xv.REML2$krige.var, xlab ="Prediction variance - CV with no re-estimation", ylab ="Prediction variance - CV with re-estimation")
+abline(0,1)
+plot(xv.REML$std.error,xv.REML2$std.error, xlab ="Standard. error - CV with no re-estimation", ylab ="Standard. error - CV with re-estimation")
+abline(0,1)
+```
+
+The prediction variance is most impacted and the statistically the best approach is to re-estimate for each split.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
