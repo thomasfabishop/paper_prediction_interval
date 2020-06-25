@@ -25,6 +25,7 @@ library(moments)
 library(ggplot2)
 library(raster)
 library(moments)
+library(randomForest)
 ```
 
 # Process Data
@@ -198,9 +199,9 @@ cor(calib$clay,calib[,7:12],method="spearman")
 
 No diff with spearman
 
-## Linear Mixed Model
+# Linear Mixed Model
 
-### Regression with OLS
+## Regression with OLS
 
 Build prediction frame
 
@@ -240,7 +241,7 @@ wallyplot(clay.lm, FUN=qqnorm.wally, main="")
 
 
 
-### Fit Linear Mixed Model
+## Fit Linear Mixed Model
 
 Create GeoR object and include OLS residuals to examine spatial structure of these to see if kriging residuals has merit.
 
@@ -432,7 +433,7 @@ We now have our final model with land use and pc5 and pc6.
 
 NOTE - likfit function not sensitive to range parameter - not sure if dataset specific or issue with library.  Kate or Liana data?
 
-### Model Testing
+## Model Testing
 
 Now we perform cross-validation to assess the model in terms of its predictions - point and interval estimates.
 
@@ -490,23 +491,276 @@ abline(0,1)
 
 The prediction variance is most impacted and the statistically the best approach is to re-estimate for each split.
 
+Could add Lin's?.
+
+```{r}
+plot.df<-cbind(xv.REML$data,xv.REML$predicted)
+plot.df<-as.data.frame(plot.df)
+colnames(plot.df)[1] <- "observed"
+colnames(plot.df)[2] <- "predicted"
+
+sum.df<-data.frame (
+  stats=c("RMSE = 11.47","ME = -0.08", "Mean SSPE = 1.07", "Median SSPE = 0.49", "LCCC = 0.70"),
+  y=c(85.0, 80.0, 75.0, 70.0, 65.0))
+
+#tiff('calib_lmm.tiff')
+ggplot(plot.df, aes(x = observed, y = predicted)) +
+  geom_point(size=2) +
+  xlab("Observed - Clay (%)") +
+  ylab("Predicted - Clay (%)") +
+  theme(axis.title.y = element_text(size=12),axis.text.y  = element_text(size=10))+
+  xlim(0,85)+
+  ylim(0,85)+
+  geom_abline(intercept = 0, slope = 1) +
+  coord_equal()+
+  geom_text(data=sum.df,aes(x=0,y=y,label=stats),size=5, hjust=0)
+#dev.off()
+```
+
+## Model Validation
+
+Now we predict at validation sites.
+
+```{r}
+fitmodel_gstat <- as.vgm.variomodel(lmm.exp)
+coordinates(valid) <- ~x + y
+coordinates(calib) <- ~x + y
+eblup <- krige(clay~lu+pc5+pc6,
+               calib,valid,model = fitmodel_gstat,debug.level=-1)
+
+summary(eblup$var1.pred)
+```
+
+## Test Point Estimates
+
+```{r}
+mean(eblup$var1.pred-valid$clay)
+sqrt(mean((eblup$var1.pred-valid$clay)^2))
+```
+
+### Plot data
+
+```{r}
+plot.df<-cbind(valid$clay,eblup$var1.pred)
+plot.df<-as.data.frame(plot.df)
+colnames(plot.df)[1] <- "observed"
+colnames(plot.df)[2] <- "predicted"
+
+sum.df<-data.frame (
+  stats=c("RMSE = 16.44","ME = -6.68", "LCCC = 0.70"),
+  y=c(85.0, 80.0, 75.0))
+
+#tiff('calib_lmm.tiff')
+ggplot(plot.df, aes(x = observed, y = predicted)) +
+  geom_point(size=2) +
+  xlab("Observed - Clay (%)") +
+  ylab("Predicted - Clay (%)") +
+  theme(axis.title.y = element_text(size=12),axis.text.y  = element_text(size=10))+
+  xlim(0,85)+
+  ylim(0,85)+
+  geom_abline(intercept = 0, slope = 1) +
+  coord_equal()+
+  geom_text(data=sum.df,aes(x=0,y=y,label=stats),size=5, hjust=0)
+#dev.off()
+```
 
 
 
+## Test Interval Estimates
+
+```{r}
+valid.df<-data.frame(valid,eblup$var1.pred,eblup$var1.var)
+valid.df$ID<-seq(1,44,1)
+```
+
+95% interval
+
+```{r}
+
+sum.df<-data.frame (
+  stats=c("Coverage Probability = 0.88"),
+  y=c(-10))
+
+PIl95<-valid.df$eblup.var1.pred-sqrt(valid.df$eblup.var1.var)*1.96
+PIu95<-valid.df$eblup.var1.pred+sqrt(valid.df$eblup.var1.var)*1.96
+
+valid.df$hit95<-as.numeric(valid.df$clay >= PIl95 & valid.df$clay <= PIu95)
+hit95<-sum(valid.df$hit95)/44
+ggplot(valid.df, aes(x = ID, y = clay)) +
+  geom_point(data=valid.df[which(valid.df$hit95==1),],colour='blue',size=4) +
+  geom_point(data=valid.df[which(valid.df$hit95==0),],colour='red',size=4) +
+  #geom_point(size = 4) +
+  ylab("Clay (%)") +
+  xlab("Site") +
+  #theme(axis.title.y = element_text(size=20))+
+  theme(axis.title.y = element_text(size=20),axis.text.y  = element_text(size=14))+
+  theme(axis.title.x = element_text(size=20),axis.text.x  = element_text(size=14))+
+  geom_errorbar(aes(ymax = PIu95, ymin = PIl95))+
+  geom_text(data=sum.df,aes(x=0,y=y,label=stats),size=5, hjust=0)
+
+```
+
+
+90% interval
+
+```{r}
+
+sum.df<-data.frame (
+  stats=c("Coverage Probability = 0.82"),
+  y=c(-10))
+
+PIl95<-valid.df$eblup.var1.pred-sqrt(valid.df$eblup.var1.var)*1.645
+PIu95<-valid.df$eblup.var1.pred+sqrt(valid.df$eblup.var1.var)*1.645
+
+valid.df$hit90<-as.numeric(valid.df$clay >= PIl95 & valid.df$clay <= PIu95)
+hit90<-sum(valid.df$hit90)/44
+ggplot(valid.df, aes(x = ID, y = clay)) +
+  geom_point(data=valid.df[which(valid.df$hit90==1),],colour='blue',size=4) +
+  geom_point(data=valid.df[which(valid.df$hit90==0),],colour='red',size=4) +
+  #geom_point(size = 4) +
+  ylab("Clay (%)") +
+  xlab("Site") +
+  #theme(axis.title.y = element_text(size=20))+
+  theme(axis.title.y = element_text(size=20),axis.text.y  = element_text(size=14))+
+  theme(axis.title.x = element_text(size=20),axis.text.x  = element_text(size=14))+
+  geom_errorbar(aes(ymax = PIu95, ymin = PIl95))+
+  geom_text(data=sum.df,aes(x=0,y=y,label=stats),size=5, hjust=0)
+
+```
+
+66% interval
+
+```{r}
+
+sum.df<-data.frame (
+  stats=c("Coverage Probability = 0.41"),
+  y=c(-10))
+
+PIl95<-valid.df$eblup.var1.pred-sqrt(valid.df$eblup.var1.var)*1
+PIu95<-valid.df$eblup.var1.pred+sqrt(valid.df$eblup.var1.var)*1
+
+valid.df$hit66<-as.numeric(valid.df$clay >= PIl95 & valid.df$clay <= PIu95)
+hit66<-sum(valid.df$hit66)/44
+ggplot(valid.df, aes(x = ID, y = clay)) +
+  geom_point(data=valid.df[which(valid.df$hit66==1),],colour='blue',size=4) +
+  geom_point(data=valid.df[which(valid.df$hit66==0),],colour='red',size=4) +
+  #geom_point(size = 4) +
+  ylab("Clay (%)") +
+  xlab("Site") +
+  #theme(axis.title.y = element_text(size=20))+
+  theme(axis.title.y = element_text(size=20),axis.text.y  = element_text(size=14))+
+  theme(axis.title.x = element_text(size=20),axis.text.x  = element_text(size=14))+
+  geom_errorbar(aes(ymax = PIu95, ymin = PIl95))+
+  geom_text(data=sum.df,aes(x=0,y=y,label=stats),size=5, hjust=0)
+
+```
+
+In talk had 95, 90, 80, 50, 20% PI - could do this.
+
+Could plot covergage probability versus PI
+
+# Random Forest Modelling
+
+```{r}
+rf_model <- randomForest(clay ~ soil+lu+pc1+pc2+pc3+pc4+pc5+pc6,data=calib, ntree = 500, mtry = 3,importance = TRUE,do.trace = 100, proximity=TRUE)
+rf_predictV<-predict(rf_model, valid)
+plot(valid$clay,rf_predictV)
+mean(rf_predictV-valid$clay)
+sqrt(mean((rf_predictV-valid$clay)^2))
+```
+
+Extract individual trees
+
+```{r}
+rf_predictVi<-predict(rf_model, valid,predict.all=TRUE) 
+individual=rf_predictVi$individual #extract the matrix where each column contains the predictions by each tree in the forest
+aggregate=rf_predictVi$aggregate  #mean of trees
+```
+
+Extract parts of tree
+```{r}
+aggregate=rf_predictVi$aggregate  #extract the average of predictions
+agg1=aggregate[[1]]   #extract the average for a specific position
+```
+
+extract the entire Mth row corresponding to all the predictions for that position in the tree
+extract quantiles for validation points
+
+```{r}
+output<-data.frame(NA,ncol=12,nrow=length(individual[,1]))
+
+kount<-0
+
+for (i in 1:length(individual[,1])){
+    
+  ind1=individual[i,]
+  
+  qu<-quantile(ind1, probs=c(0.025,0.05,0.1,0.25,0.4,0.5,0.6,0.75,0.9,0.95,0.975))
+  ave<-mean(ind1)
+  
+  kount<-kount+1
+  
+  output[kount,1]<-qu[1]
+  output[kount,2]<-qu[2]
+  output[kount,3]<-qu[3]
+  output[kount,4]<-qu[4]
+  output[kount,5]<-qu[5]
+  output[kount,6]<-qu[6]
+  output[kount,7]<-qu[7]
+  output[kount,8]<-qu[8]
+  output[kount,9]<-qu[9]
+  output[kount,10]<-qu[10]
+  output[kount,11]<-qu[11]
+  output[kount,12]<-ave  
+  
+  print(kount)
+}
 
 
 
+qout<-output
 
+names(qout)[1:12] <- c("q2.5","q5","q10","q25","q40","q50","q60","q75","q90","q95","q97.5","ave")
 
+head(qout)
 
+id<-1:44
 
+qout<-cbind(id,valid$clay,qout)
 
+names(qout)[1:2] <- c("Site","Clay")
 
+```
 
+#95% PI
+#Calculate hits
 
+```{r}
+qout$hit95<-as.numeric(qout$Clay >= qout$q2.5 & qout$Clay <= qout$q97.5)
+sum(qout$hit95)/44
+```
 
+```{r}
+ggplot(qout, aes(x = Site, y = Clay)) + 
+  geom_point(data=qout[which(qout$hit95==1),],colour='blue',size=4) +
+  geom_point(data=qout[which(qout$hit95==0),],colour='red',size=4) +
+  #geom_point(size = 4) +
+  ylab("Clay (%)") +
+  xlab("Site") +
+  #theme(axis.title.y = element_text(size=20))+
+  theme(axis.title.y = element_text(size=20),axis.text.y  = element_text(size=14))+
+  theme(axis.title.x = element_text(size=20),axis.text.x  = element_text(size=14))+
+  geom_errorbar(aes(ymax = q97.5, ymin = q2.5))
+```
 
+Put in set.seed to get same RF split
 
+Save workspace
+
+```{r}
+save.image("paper.RMD")
+
+```
 
 
 
