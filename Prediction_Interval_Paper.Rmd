@@ -1,5 +1,5 @@
 ---
-title: "Prediction Interval"
+title: "Draft Prediction Interval"
 author: "T. Bishop"
 date: "`r Sys.Date()`"
 output:
@@ -26,6 +26,12 @@ library(ggplot2)
 library(raster)
 library(moments)
 library(randomForest)
+library(DescTools)
+```
+
+Set seed to have repeatable splits.
+```{r}
+set.seed(5)
 ```
 
 # Process Data
@@ -330,6 +336,7 @@ lmm.exp$loglik
 lmm.exp$cov.pars
 lmm.exp$phi
 lmm.exp$nugget
+summary(lmm.exp)
 ```
 
 The best combination is 5 but it is marginal.  The spatial model is best due to smaller AIC.
@@ -451,11 +458,13 @@ mean(xv.REML$std.error^2)
 median(xv.REML$std.error^2)
 ```
 
-We test the bias and accuracy.
+We test the bias and accuracy and LCC.
 
 ```{r}
 mean(xv.REML$error)
 sqrt(mean(xv.REML$error^2))
+lcc<-CCC(xv.REML$data,xv.REML$predicted)
+lcc$rho.c
 ```
 
 Now do by re-fitting model parameters at each plit.
@@ -471,11 +480,13 @@ mean(xv.REML2$std.error^2)
 median(xv.REML2$std.error^2)
 ```
 
-We test the bias and accuracy.
+We test the bias and accuracy and LCC.
 
 ```{r}
 mean(xv.REML2$error)
 sqrt(mean(xv.REML2$error^2))
+lcc<-CCC(xv.REML2$data,xv.REML2$predicted)
+lcc$rho.c
 ```
 
 Let compare predictions, prediction variance and standardised error using both CV approaches. 
@@ -586,6 +597,7 @@ PIu95<-valid.df$eblup.var1.pred+sqrt(valid.df$eblup.var1.var)*1.96
 
 valid.df$hit95<-as.numeric(valid.df$clay >= PIl95 & valid.df$clay <= PIu95)
 hit95<-sum(valid.df$hit95)/44
+hit95
 ggplot(valid.df, aes(x = ID, y = clay)) +
   geom_point(data=valid.df[which(valid.df$hit95==1),],colour='blue',size=4) +
   geom_point(data=valid.df[which(valid.df$hit95==0),],colour='red',size=4) +
